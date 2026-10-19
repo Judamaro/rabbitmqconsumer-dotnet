@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="RabbitMQConsumer.App/RabbitMQConsumer.App.csproj" />
+  <Project Path="RabbitMQConsumer.Application/RabbitMQConsumer.Application.csproj" />
+  <Project Path="RabbitMQConsumer.Configuration/RabbitMQConsumer.Configuration.csproj" />
+  <Project Path="RabbitMQConsumer.Shared/RabbitMQConsumer.Shared.csproj" />
+</Solution>
