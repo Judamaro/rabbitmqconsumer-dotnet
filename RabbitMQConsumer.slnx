@@ -4,4 +4,5 @@
   <Project Path="RabbitMQConsumer.Configuration/RabbitMQConsumer.Configuration.csproj" />
   <Project Path="RabbitMQConsumer.Infraestructure/RabbitMQConsumer.Infraestructure.csproj" />
   <Project Path="RabbitMQConsumer.Shared/RabbitMQConsumer.Shared.csproj" />
+  <Project Path="RabbitMQConsumer.Test/RabbitMQConsumer.Test.csproj" />
 </Solution>

@@ -1,6 +1,6 @@
 namespace RabbitMQConsumer.Infraestructure.Interface.Repositories;
 
-public sealed class RabbitConnectionRepository(IOptions<RabbitMQOptions> _rabbitMQOptions, ILogger<RabbitConnectionRepository> _logger) : IRabbitConnectionRepository, IAsyncDisposable
+public sealed class RabbitConnectionRepository(IOptions<RabbitMQOptions> _rabbitMQOptions, IConnectionFactory _connectionFactory, ILogger<RabbitConnectionRepository> _logger) : IRabbitConnectionRepository, IAsyncDisposable
 {
     private static readonly TimeSpan InitialRetryDelay = TimeSpan.FromSeconds(1);
 
@@ -33,7 +33,6 @@ public sealed class RabbitConnectionRepository(IOptions<RabbitMQOptions> _rabbit
 
     private async Task<IConnection> ConnectWithRetryAsync(CancellationToken cancellationToken)
     {
-        ConnectionFactory connectionFactory = BuildConnectionFactory();
         TimeSpan maxRetryDelay = TimeSpan.FromSeconds(_rabbitMQOptions.Value.MaxConnectRetryDelaySeconds);
         TimeSpan retryDelay = InitialRetryDelay;
         int attempt = 0;
@@ -43,7 +42,7 @@ public sealed class RabbitConnectionRepository(IOptions<RabbitMQOptions> _rabbit
             attempt++;
             try
             {
-                IConnection connection = await connectionFactory.CreateConnectionAsync(cancellationToken);
+                IConnection connection = await _connectionFactory.CreateConnectionAsync(cancellationToken);
                 SubscribeToConnectionEvents(connection);
                 _logger.LogInformation("Connected to RabbitMQ {Host}:{Port}{VirtualHost} after {Attempt} attempt(s)", _rabbitMQOptions.Value.Host, _rabbitMQOptions.Value.Port, _rabbitMQOptions.Value.VirtualHost, attempt);
                 return connection;
@@ -89,21 +88,6 @@ public sealed class RabbitConnectionRepository(IOptions<RabbitMQOptions> _rabbit
             return Task.CompletedTask;
         };
     }
-
-    private ConnectionFactory BuildConnectionFactory()
-        => new()
-        {
-            ClientProvidedName = _rabbitMQOptions.Value.Name,
-            HostName = _rabbitMQOptions.Value.Host,
-            Port = _rabbitMQOptions.Value.Port,
-            VirtualHost = _rabbitMQOptions.Value.VirtualHost,
-            UserName = _rabbitMQOptions.Value.User,
-            Password = _rabbitMQOptions.Value.Pwd,
-            AutomaticRecoveryEnabled = true,
-            TopologyRecoveryEnabled = true,
-            NetworkRecoveryInterval = TimeSpan.FromSeconds(_rabbitMQOptions.Value.NetworkRecoveryIntervalSeconds),
-            RequestedHeartbeat = TimeSpan.FromSeconds(_rabbitMQOptions.Value.HeartbeatSeconds)
-        };
 
     public async ValueTask DisposeAsync()
     {

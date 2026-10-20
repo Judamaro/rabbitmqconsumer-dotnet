@@ -1,0 +1,16 @@
+global using System.Net;
+global using System.Text;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Logging;
+global using Microsoft.Extensions.Logging.Testing;
+global using Microsoft.Extensions.Options;
+global using NSubstitute;
+global using NSubstitute.ExceptionExtensions;
+global using RabbitMQ.Client;
+global using RabbitMQ.Client.Events;
+global using RabbitMQ.Client.Exceptions;
+global using RabbitMQConsumer.Application.Dto;
+global using RabbitMQConsumer.Application.Interfaces.Repositories;
+global using RabbitMQConsumer.Application.Services;
+global using RabbitMQConsumer.Infraestructure.Interface.Repositories;
+global using RabbitMQConsumer.Shared.OptionsValues;

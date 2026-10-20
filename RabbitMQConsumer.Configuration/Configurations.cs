@@ -49,6 +49,7 @@ public static class Configurations
 
     public static IServiceCollection AddScopedServices(this IServiceCollection serviceCollection)
     {
+        serviceCollection.TryAddSingleton<IConnectionFactory>(serviceProvider => RabbitConnectionFactoryBuilder.Build(serviceProvider.GetRequiredService<IOptions<RabbitMQOptions>>().Value));
         serviceCollection.TryAddSingleton<IRabbitConnectionRepository, RabbitConnectionRepository>();
         serviceCollection.TryAddScoped<IPublisherApiRepository, PublisherApiRepository>();
 
