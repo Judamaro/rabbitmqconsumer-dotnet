@@ -9,6 +9,7 @@
     Configurations
         .AddHostedService(builder.Services)
         .AddScopedServices()
+        .AddHttpClients()
         .LoadOptionsValues(builder.Configuration);
 
     IHost host = builder.Build();
