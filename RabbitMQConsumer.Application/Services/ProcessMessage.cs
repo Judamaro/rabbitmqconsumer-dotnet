@@ -1,6 +1,6 @@
 namespace RabbitMQConsumer.Application.Services;
 
-public class ProcessMessage(ILogger<ProcessMessage> _logger, IOptions<RabbitMQOptions> _rabbitMQOptions, IRabbitConnectionRepository _rabbitConnectionRepository) : BackgroundService
+public class ProcessMessage(ILogger<ProcessMessage> _logger, IOptions<RabbitMQOptions> _rabbitMQOptions, IRabbitConnectionRepository _rabbitConnectionRepository, IServiceScopeFactory _serviceScopeFactory) : BackgroundService
 {
     private static readonly TimeSpan InitialRetryDelay = TimeSpan.FromSeconds(1);
 
@@ -55,7 +55,7 @@ public class ProcessMessage(ILogger<ProcessMessage> _logger, IOptions<RabbitMQOp
         await channel.BasicQosAsync(prefetchSize: 0, prefetchCount: _rabbitMQOptions.Value.PrefetchCount, global: false, cancellationToken: stoppingToken);
 
         AsyncEventingBasicConsumer consumer = new(channel);
-        consumer.ReceivedAsync += (_, eventArgs) => HandleMessageAsync(channel, eventArgs);
+        consumer.ReceivedAsync += (_, eventArgs) => HandleMessageAsync(channel, eventArgs, stoppingToken);
 
         await channel.BasicConsumeAsync(queue: _rabbitMQOptions.Value.Queue, autoAck: false, consumer: consumer, cancellationToken: stoppingToken);
         _logger.LogInformation("Consuming messages from queue {Queue}", _rabbitMQOptions.Value.Queue);
@@ -64,29 +64,61 @@ public class ProcessMessage(ILogger<ProcessMessage> _logger, IOptions<RabbitMQOp
         await channelClosed.Task.WaitAsync(stoppingToken);
     }
 
-    private async Task HandleMessageAsync(IChannel channel, BasicDeliverEventArgs eventArgs)
+    private async Task HandleMessageAsync(IChannel channel, BasicDeliverEventArgs eventArgs, CancellationToken stoppingToken)
     {
+        MessageDto? messageDto = null;
         bool processed = false;
+
+        await using AsyncServiceScope scope = _serviceScopeFactory.CreateAsyncScope();
+        IPublisherApiRepository publisherApiRepository = scope.ServiceProvider.GetRequiredService<IPublisherApiRepository>();
+
         try
         {
-            MessageDto? messageDto = GetMessageFromBodyEvent(eventArgs);
-            processed = messageDto is not null;
+            messageDto = GetMessageFromBodyEvent(eventArgs);
+            if (messageDto is not null)
+            {
+                await publisherApiRepository.MarkAsProcessedAsync(messageDto.Id, stoppingToken);
+                processed = true;
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
         }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Exception consumer.ReceivedAsync: {ExceptionMessage}", exception.Message);
+            if (messageDto is not null)
+                await TryAddErrorMessageAsync(publisherApiRepository, messageDto.Id, exception.Message, stoppingToken);
         }
 
+        await AckOrNackAsync(channel, eventArgs.DeliveryTag, processed);
+    }
+
+    private async Task TryAddErrorMessageAsync(IPublisherApiRepository publisherApiRepository, int messageId, string errorMessage, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await publisherApiRepository.AddErrorMessageAsync(messageId, errorMessage, stoppingToken);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Could not report error for message {MessageId} to the publisher API", messageId);
+        }
+    }
+
+    private async Task AckOrNackAsync(IChannel channel, ulong deliveryTag, bool processed)
+    {
         try
         {
             if (processed)
-                await channel.BasicAckAsync(deliveryTag: eventArgs.DeliveryTag, multiple: false);
+                await channel.BasicAckAsync(deliveryTag: deliveryTag, multiple: false);
             else
-                await channel.BasicNackAsync(deliveryTag: eventArgs.DeliveryTag, multiple: false, requeue: false);
+                await channel.BasicNackAsync(deliveryTag: deliveryTag, multiple: false, requeue: false);
         }
         catch (AlreadyClosedException exception)
         {
-            _logger.LogWarning(exception, "Could not ack/nack delivery {DeliveryTag}, channel is closed", eventArgs.DeliveryTag);
+            _logger.LogWarning(exception, "Could not ack/nack delivery {DeliveryTag}, channel is closed", deliveryTag);
         }
     }
 

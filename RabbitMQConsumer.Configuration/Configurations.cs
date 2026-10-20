@@ -22,7 +22,7 @@ public static class Configurations
     public static IServiceCollection AddHostedService(this IServiceCollection serviceCollection)
     {
         serviceCollection.AddHostedService<ProcessMessage>();
-        
+
         return serviceCollection;
     }
 
@@ -49,7 +49,8 @@ public static class Configurations
 
     public static IServiceCollection AddScopedServices(this IServiceCollection serviceCollection)
     {
-        serviceCollection.AddSingleton<IRabbitConnectionRepository, RabbitConnectionRepository>();
+        serviceCollection.TryAddSingleton<IRabbitConnectionRepository, RabbitConnectionRepository>();
+        serviceCollection.TryAddScoped<IPublisherApiRepository, PublisherApiRepository>();
 
         return serviceCollection;
     }
