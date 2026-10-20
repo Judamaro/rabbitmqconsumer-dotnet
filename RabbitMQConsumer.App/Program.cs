@@ -6,9 +6,10 @@
 
     HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
-    Configurations.LoadOptionsValues(builder.Services, builder.Configuration);
-
-    Configurations.AddHostedService(builder.Services);
+    Configurations
+        .AddHostedService(builder.Services)
+        .AddScopedServices()
+        .LoadOptionsValues(builder.Configuration);
 
     IHost host = builder.Build();
     await host.RunAsync();

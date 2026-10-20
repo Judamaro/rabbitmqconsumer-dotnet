@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../RabbitMQConsumer.Application/RabbitMQConsumer.Application.csproj" />
+    <ProjectReference Include="../RabbitMQConsumer.Infraestructure/RabbitMQConsumer.Infraestructure.csproj" />
     <ProjectReference Include="../RabbitMQConsumer.Shared/RabbitMQConsumer.Shared.csproj" />
   </ItemGroup>
 

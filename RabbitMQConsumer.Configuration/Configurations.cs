@@ -2,7 +2,7 @@
 
 public static class Configurations
 {
-    public static void LoadOptionsValues(IServiceCollection serviceCollection, IConfigurationManager configurationManager)
+    public static IServiceCollection LoadOptionsValues(this IServiceCollection serviceCollection, IConfigurationManager configurationManager)
     {
         serviceCollection
             .AddOptions<RabbitMQOptions>()
@@ -13,8 +13,21 @@ public static class Configurations
             .AddOptions<UrlOptions>()
             .Bind(configurationManager.GetSection(typeof(UrlOptions).Name))
             .ValidateOnStart();
+
+        return serviceCollection;
     }
 
-    public static void AddHostedService(IServiceCollection serviceCollection)
-        => serviceCollection.AddHostedService<ProcessMessage>();
+    public static IServiceCollection AddHostedService(this IServiceCollection serviceCollection)
+    {
+        serviceCollection.AddHostedService<ProcessMessage>();
+        
+        return serviceCollection;
+    }
+
+    public static IServiceCollection AddScopedServices(this IServiceCollection serviceCollection)
+    {
+        serviceCollection.AddSingleton<IRabbitConnectionRepository, RabbitConnectionRepository>();
+
+        return serviceCollection;
+    }
 }
