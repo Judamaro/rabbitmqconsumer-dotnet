@@ -6,12 +6,14 @@ public static class Configurations
     {
         serviceCollection
             .AddOptions<RabbitMQOptions>()
-            .Bind(configurationManager.GetSection(typeof(RabbitMQOptions).Name))
+            .Bind(configurationManager.GetSection(nameof(RabbitMQOptions)))
+            .ValidateDataAnnotations()
             .ValidateOnStart();
 
         serviceCollection
             .AddOptions<UrlOptions>()
-            .Bind(configurationManager.GetSection(typeof(UrlOptions).Name))
+            .Bind(configurationManager.GetSection(nameof(UrlOptions)))
+            .ValidateDataAnnotations()
             .ValidateOnStart();
 
         return serviceCollection;
