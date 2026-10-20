@@ -1,4 +1,4 @@
-﻿try
+try
 {
     Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateBootstrapLogger();
 
@@ -6,11 +6,12 @@
 
     HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
-    Configurations
-        .AddHostedService(builder.Services)
-        .AddScopedServices()
-        .AddHttpClients()
-        .LoadOptionsValues(builder.Configuration);
+    builder.Services
+        .AddSerilog((services, loggerConfiguration) => loggerConfiguration.ReadFrom.Configuration(builder.Configuration).ReadFrom.Services(services));
+
+    builder.Services
+        .AddApplication()
+        .AddInfrastructure(builder.Configuration);
 
     IHost host = builder.Build();
     await host.RunAsync();

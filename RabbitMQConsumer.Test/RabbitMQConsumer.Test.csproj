@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -22,7 +22,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RabbitMQConsumer.Application\RabbitMQConsumer.Application.csproj" />
-    <ProjectReference Include="..\RabbitMQConsumer.Infraestructure\RabbitMQConsumer.Infraestructure.csproj" />
+    <ProjectReference Include="..\RabbitMQConsumer.Domain\RabbitMQConsumer.Domain.csproj" />
+    <ProjectReference Include="..\RabbitMQConsumer.Infrastructure\RabbitMQConsumer.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

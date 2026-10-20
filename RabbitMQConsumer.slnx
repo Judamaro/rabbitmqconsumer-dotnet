@@ -1,8 +1,7 @@
 <Solution>
   <Project Path="RabbitMQConsumer.App/RabbitMQConsumer.App.csproj" />
   <Project Path="RabbitMQConsumer.Application/RabbitMQConsumer.Application.csproj" />
-  <Project Path="RabbitMQConsumer.Configuration/RabbitMQConsumer.Configuration.csproj" />
-  <Project Path="RabbitMQConsumer.Infraestructure/RabbitMQConsumer.Infraestructure.csproj" />
-  <Project Path="RabbitMQConsumer.Shared/RabbitMQConsumer.Shared.csproj" />
+  <Project Path="RabbitMQConsumer.Domain/RabbitMQConsumer.Domain.csproj" />
+  <Project Path="RabbitMQConsumer.Infrastructure/RabbitMQConsumer.Infrastructure.csproj" />
   <Project Path="RabbitMQConsumer.Test/RabbitMQConsumer.Test.csproj" />
 </Solution>

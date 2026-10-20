@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -8,8 +8,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../RabbitMQConsumer.Configuration/RabbitMQConsumer.Configuration.csproj" />
-    <ProjectReference Include="../RabbitMQConsumer.Shared/RabbitMQConsumer.Shared.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.13" />
+    <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
+    <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Serilog.Formatting.Compact" Version="3.0.0" />
+    <PackageReference Include="Serilog.Settings.Configuration" Version="10.0.1" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../RabbitMQConsumer.Application/RabbitMQConsumer.Application.csproj" />
+    <ProjectReference Include="../RabbitMQConsumer.Infrastructure/RabbitMQConsumer.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>
