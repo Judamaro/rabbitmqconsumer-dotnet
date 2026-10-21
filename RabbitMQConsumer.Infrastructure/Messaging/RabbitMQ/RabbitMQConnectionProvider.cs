@@ -1,5 +1,11 @@
 namespace RabbitMQConsumer.Infrastructure.Messaging.RabbitMQ;
 
+/// <summary>
+/// Owns the shared RabbitMQ connection: opens it lazily with retries, relies on automatic recovery to keep it alive and closes it on dispose.
+/// </summary>
+/// <param name="_rabbitMQOptions">Broker settings used for logging and the retry backoff.</param>
+/// <param name="_connectionFactory">Factory that opens the connection.</param>
+/// <param name="_logger">Logger for connection attempts and lifecycle events.</param>
 public sealed class RabbitMQConnectionProvider(IOptions<RabbitMQOptions> _rabbitMQOptions, IConnectionFactory _connectionFactory, ILogger<RabbitMQConnectionProvider> _logger) : IRabbitMQConnectionProvider, IAsyncDisposable
 {
     private static readonly TimeSpan InitialRetryDelay = TimeSpan.FromSeconds(1);
@@ -7,12 +13,18 @@ public sealed class RabbitMQConnectionProvider(IOptions<RabbitMQOptions> _rabbit
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
     private volatile IConnection? _connection;
 
+    /// <inheritdoc/>
     public async Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken)
     {
         IConnection connection = await GetConnectionAsync(cancellationToken);
         return await connection.CreateChannelAsync(cancellationToken: cancellationToken);
     }
 
+    /// <summary>
+    /// Returns the shared connection, creating it once even when called concurrently.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the wait or the connection attempts.</param>
+    /// <returns>The shared connection; automatic recovery keeps it alive after network failures.</returns>
     private async Task<IConnection> GetConnectionAsync(CancellationToken cancellationToken)
     {
         if (_connection is not null)
@@ -31,6 +43,11 @@ public sealed class RabbitMQConnectionProvider(IOptions<RabbitMQOptions> _rabbit
         }
     }
 
+    /// <summary>
+    /// Opens the connection, retrying with exponential backoff (capped at <c>MaxConnectRetryDelaySeconds</c>) while the broker is unreachable.
+    /// </summary>
+    /// <param name="cancellationToken">Token to stop retrying.</param>
+    /// <returns>The opened connection, already subscribed to its lifecycle events.</returns>
     private async Task<IConnection> ConnectWithRetryAsync(CancellationToken cancellationToken)
     {
         TimeSpan maxRetryDelay = TimeSpan.FromSeconds(_rabbitMQOptions.Value.MaxConnectRetryDelaySeconds);
@@ -56,6 +73,10 @@ public sealed class RabbitMQConnectionProvider(IOptions<RabbitMQOptions> _rabbit
         }
     }
 
+    /// <summary>
+    /// Logs the connection lifecycle: shutdown, recovery, recovery errors and broker flow control (blocked/unblocked).
+    /// </summary>
+    /// <param name="connection">Connection to observe.</param>
     private void SubscribeToConnectionEvents(IConnection connection)
     {
         connection.ConnectionShutdownAsync += (_, eventArgs) =>
@@ -89,6 +110,9 @@ public sealed class RabbitMQConnectionProvider(IOptions<RabbitMQOptions> _rabbit
         };
     }
 
+    /// <summary>
+    /// Closes and disposes the shared connection, if it was opened, and releases the connection lock. Errors while closing are logged.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         if (_connection is not null)

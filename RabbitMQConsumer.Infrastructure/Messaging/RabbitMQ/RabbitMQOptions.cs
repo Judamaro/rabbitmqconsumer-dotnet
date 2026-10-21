@@ -1,5 +1,8 @@
 namespace RabbitMQConsumer.Infrastructure.Messaging.RabbitMQ;
 
+/// <summary>
+/// RabbitMQ connection and consumer settings, bound from the <c>RabbitMQOptions</c> configuration section.
+/// </summary>
 public record RabbitMQOptions
 {
     [Required]

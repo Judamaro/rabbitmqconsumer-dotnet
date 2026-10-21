@@ -1,5 +1,8 @@
 namespace RabbitMQConsumer.Infrastructure.Http.PublisherApi.Contracts;
 
+/// <summary>
+/// Response envelope returned by the publisher API.
+/// </summary>
 public record PetitionResponseDto
 {
     public required string Message { get; init; }

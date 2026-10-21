@@ -8,6 +8,10 @@ public sealed class RabbitMQMessageConsumer(ILogger<RabbitMQMessageConsumer> _lo
 {
     private static readonly TimeSpan InitialRetryDelay = TimeSpan.FromSeconds(1);
 
+    /// <summary>
+    /// Keeps consuming the queue until the host stops, recreating the channel after channel-level errors and retrying with exponential backoff when it cannot be created.
+    /// </summary>
+    /// <param name="stoppingToken">Token signaled when the host is stopping.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         TimeSpan maxRetryDelay = TimeSpan.FromSeconds(_rabbitMQOptions.Value.MaxConnectRetryDelaySeconds);
@@ -72,6 +76,13 @@ public sealed class RabbitMQMessageConsumer(ILogger<RabbitMQMessageConsumer> _lo
         await channelClosed.Task.WaitAsync(stoppingToken);
     }
 
+    /// <summary>
+    /// Handles one delivery: deserializes it, runs the use case in its own dependency scope and acknowledges the message according to the result.
+    /// When the host is stopping the delivery is left unacknowledged so the broker redelivers it.
+    /// </summary>
+    /// <param name="channel">Channel the message was delivered on.</param>
+    /// <param name="eventArgs">Delivery data, including the body and the delivery tag.</param>
+    /// <param name="stoppingToken">Token signaled when the host is stopping.</param>
     private async Task HandleDeliveryAsync(IChannel channel, BasicDeliverEventArgs eventArgs, CancellationToken stoppingToken)
     {
         MessageProcessingResult result;
@@ -102,6 +113,12 @@ public sealed class RabbitMQMessageConsumer(ILogger<RabbitMQMessageConsumer> _lo
         await AckOrNackAsync(channel, eventArgs.DeliveryTag, result);
     }
 
+    /// <summary>
+    /// Acknowledges processed messages and rejects any other result without requeue. Ignores the error when the channel is already closed, since the broker will redeliver the message.
+    /// </summary>
+    /// <param name="channel">Channel the message was delivered on.</param>
+    /// <param name="deliveryTag">Delivery tag of the message.</param>
+    /// <param name="result">Outcome of the processing.</param>
     private async Task AckOrNackAsync(IChannel channel, ulong deliveryTag, MessageProcessingResult result)
     {
         try
@@ -117,6 +134,11 @@ public sealed class RabbitMQMessageConsumer(ILogger<RabbitMQMessageConsumer> _lo
         }
     }
 
+    /// <summary>
+    /// Deserializes the delivery body as JSON, ignoring a leading UTF-8 BOM.
+    /// </summary>
+    /// <param name="basicDeliverEventArgs">Delivery data that contains the body.</param>
+    /// <returns>The message, or <see langword="null"/> when the body is empty, is not valid JSON or is the JSON <c>null</c> literal.</returns>
     private MessageDto? DeserializeMessage(BasicDeliverEventArgs basicDeliverEventArgs)
     {
         if (basicDeliverEventArgs.Body.IsEmpty)

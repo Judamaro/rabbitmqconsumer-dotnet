@@ -5,6 +5,11 @@ namespace RabbitMQConsumer.Domain.Messages;
 /// </summary>
 public sealed record Message
 {
+    /// <summary>
+    /// Creates a message from values already validated by <see cref="TryCreate"/>.
+    /// </summary>
+    /// <param name="id">Message identifier.</param>
+    /// <param name="payload">Message content.</param>
     private Message(int id, string payload)
     {
         Id = id;
@@ -14,6 +19,14 @@ public sealed record Message
     public int Id { get; }
     public string Payload { get; }
 
+    /// <summary>
+    /// Creates a <see cref="Message"/> when the values satisfy the business rules: the id must be greater than zero and the payload must not be empty.
+    /// </summary>
+    /// <param name="id">Message identifier.</param>
+    /// <param name="payload">Message content.</param>
+    /// <param name="message">The created message, or <see langword="null"/> when a rule is not satisfied.</param>
+    /// <param name="error">Description of the broken rule, or <see langword="null"/> when the message is valid.</param>
+    /// <returns><see langword="true"/> when the message is valid; otherwise <see langword="false"/>.</returns>
     public static bool TryCreate(int id, string? payload, [NotNullWhen(true)] out Message? message, [NotNullWhen(false)] out string? error)
     {
         message = null;

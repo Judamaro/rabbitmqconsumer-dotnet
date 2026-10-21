@@ -1,5 +1,8 @@
 namespace RabbitMQConsumer.Application.Messages;
 
+/// <summary>
+/// Outcome of processing a message, used by the transport to decide whether to acknowledge it.
+/// </summary>
 public enum MessageProcessingResult
 {
     /// <summary>The message was processed and can be acknowledged.</summary>

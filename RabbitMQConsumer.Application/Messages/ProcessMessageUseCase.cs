@@ -1,7 +1,13 @@
 namespace RabbitMQConsumer.Application.Messages;
 
+/// <summary>
+/// Applies the domain rules to each message and notifies the publisher API whether it was processed or failed.
+/// </summary>
+/// <param name="_publisherApiClient">Port used to notify the publisher API.</param>
+/// <param name="_logger">Logger for rejected and failed messages.</param>
 public sealed class ProcessMessageUseCase(IPublisherApiClient _publisherApiClient, ILogger<ProcessMessageUseCase> _logger) : IProcessMessageUseCase
 {
+    /// <inheritdoc/>
     public async Task<MessageProcessingResult> ExecuteAsync(MessageDto messageDto, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(messageDto);
@@ -29,6 +35,12 @@ public sealed class ProcessMessageUseCase(IPublisherApiClient _publisherApiClien
         }
     }
 
+    /// <summary>
+    /// Reports the processing error to the publisher API on a best-effort basis: failures are logged and never thrown, except cancellation.
+    /// </summary>
+    /// <param name="messageId">Identifier of the message that failed.</param>
+    /// <param name="errorMessage">Description of the error.</param>
+    /// <param name="cancellationToken">Token to cancel the request.</param>
     private async Task TryAddErrorMessageAsync(int messageId, string errorMessage, CancellationToken cancellationToken)
     {
         try
