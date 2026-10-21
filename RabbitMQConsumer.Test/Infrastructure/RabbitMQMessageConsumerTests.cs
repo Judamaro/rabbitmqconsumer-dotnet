@@ -70,6 +70,31 @@ public class RabbitMQMessageConsumerTests : IAsyncLifetime
         await _processMessageUseCase.Received(1).ExecuteAsync(new MessageDto { Id = 42, Payload = "hello" }, Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("{\"id\":42,\"payload\":\"hello\"}")]
+    [InlineData("{\"Id\":\"42\",\"Payload\":\"hello\"}")]
+    [InlineData("{\"ID\":42,\"PAYLOAD\":\"hello\",\"unknown\":true}")]
+    public async Task TolerantJson_IsDeserialized(string body)
+    {
+        SetupUseCaseResult(MessageProcessingResult.Processed);
+        await StartAndWaitForConsumersAsync(1);
+
+        await DeliverAsync(body);
+
+        await _processMessageUseCase.Received(1).ExecuteAsync(new MessageDto { Id = 42, Payload = "hello" }, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task BodyWithUtf8Bom_IsDeserialized()
+    {
+        SetupUseCaseResult(MessageProcessingResult.Processed);
+        await StartAndWaitForConsumersAsync(1);
+
+        await DeliverAsync([.. Encoding.UTF8.Preamble, .. Encoding.UTF8.GetBytes(ValidBody)]);
+
+        await _processMessageUseCase.Received(1).ExecuteAsync(new MessageDto { Id = 42, Payload = "hello" }, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task ProcessedResult_Acks()
     {
@@ -98,8 +123,10 @@ public class RabbitMQMessageConsumerTests : IAsyncLifetime
 
     [Theory]
     [InlineData("")]
+    [InlineData("   ")]
     [InlineData("not json")]
     [InlineData("null")]
+    [InlineData("[1,2,3]")]
     public async Task UnreadableBody_NacksWithoutCallingUseCase(string body)
     {
         await StartAndWaitForConsumersAsync(1);
@@ -228,14 +255,16 @@ public class RabbitMQMessageConsumerTests : IAsyncLifetime
         }
     }
 
-    private async Task<ulong> DeliverAsync(string body)
+    private Task<ulong> DeliverAsync(string body) => DeliverAsync(Encoding.UTF8.GetBytes(body));
+
+    private async Task<ulong> DeliverAsync(byte[] body)
     {
         IAsyncBasicConsumer consumer;
         lock (_registeredConsumers)
             consumer = _registeredConsumers[^1];
 
         ulong deliveryTag = ++_nextDeliveryTag;
-        await consumer.HandleBasicDeliverAsync("consumer-tag", deliveryTag, false, "exchange", "routing-key", new BasicProperties(), Encoding.UTF8.GetBytes(body));
+        await consumer.HandleBasicDeliverAsync("consumer-tag", deliveryTag, false, "exchange", "routing-key", new BasicProperties(), body);
         return deliveryTag;
     }
 }

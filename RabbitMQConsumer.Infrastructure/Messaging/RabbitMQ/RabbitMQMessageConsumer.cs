@@ -125,10 +125,13 @@ public sealed class RabbitMQMessageConsumer(ILogger<RabbitMQMessageConsumer> _lo
             return null;
         }
 
-        string body = Encoding.UTF8.GetString(basicDeliverEventArgs.Body.Span);
+        ReadOnlySpan<byte> body = basicDeliverEventArgs.Body.Span;
+        if (body.StartsWith(Encoding.UTF8.Preamble))
+            body = body[Encoding.UTF8.Preamble.Length..];
+
         try
         {
-            MessageDto? messageDto = JsonConvert.DeserializeObject<MessageDto>(body);
+            MessageDto? messageDto = JsonSerializer.Deserialize(body, MessageJsonContext.Default.MessageDto);
             if (messageDto is null)
                 _logger.LogError("Delivery {DeliveryTag} body deserialized to null", basicDeliverEventArgs.DeliveryTag);
 

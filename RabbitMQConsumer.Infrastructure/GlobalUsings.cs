@@ -1,13 +1,14 @@
 global using System.ComponentModel.DataAnnotations;
 global using System.Net.Http.Json;
 global using System.Text;
+global using System.Text.Json;
+global using System.Text.Json.Serialization;
 global using Microsoft.Extensions.Configuration;
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.DependencyInjection.Extensions;
 global using Microsoft.Extensions.Hosting;
 global using Microsoft.Extensions.Logging;
 global using Microsoft.Extensions.Options;
-global using Newtonsoft.Json;
 global using Polly;
 global using RabbitMQ.Client;
 global using RabbitMQ.Client.Events;

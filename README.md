@@ -72,7 +72,7 @@ The dependency rule is enforced by `RabbitMQConsumer.Test/Architecture/Dependenc
 | HTTP | `IHttpClientFactory` typed client + [Microsoft.Extensions.Http.Resilience](https://learn.microsoft.com/dotnet/core/resilience/http-resilience) 10.11.0 (Polly v8) |
 | Configuration | Options pattern with DataAnnotations validation on startup |
 | Logging | Serilog: console and rolling compact-JSON file, configured from `appsettings.json` |
-| Serialization | Newtonsoft.Json for incoming messages, System.Text.Json for outgoing requests |
+| Serialization | System.Text.Json with source generation, for incoming messages and outgoing requests |
 | Testing | xUnit, NSubstitute, `FakeLogger` (Microsoft.Extensions.Diagnostics.Testing), coverlet |
 
 ## Patterns and practices
