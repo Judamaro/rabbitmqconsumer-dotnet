@@ -44,6 +44,25 @@ public class RabbitMQConnectionProviderTests
     }
 
     [Fact]
+    public void IsConnected_BeforeFirstConnection_ReturnsFalse()
+    {
+        Assert.False(_repository.IsConnected);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task IsConnected_AfterConnecting_ReflectsConnectionState(bool isOpen)
+    {
+        _connection.IsOpen.Returns(isOpen);
+        _connectionFactory.CreateConnectionAsync(Arg.Any<CancellationToken>()).Returns(_connection);
+
+        await _repository.CreateChannelAsync(CancellationToken.None);
+
+        Assert.Equal(isOpen, _repository.IsConnected);
+    }
+
+    [Fact]
     public async Task CreateChannelAsync_ConcurrentCalls_CreateOnlyOneConnection()
     {
         _connectionFactory.CreateConnectionAsync(Arg.Any<CancellationToken>()).Returns(async _ =>

@@ -72,6 +72,7 @@ The dependency rule is enforced by `RabbitMQConsumer.Test/Architecture/Dependenc
 | HTTP | `IHttpClientFactory` typed client + [Microsoft.Extensions.Http.Resilience](https://learn.microsoft.com/dotnet/core/resilience/http-resilience) 10.11.0 (Polly v8) |
 | Configuration | Options pattern with DataAnnotations validation on startup |
 | Logging | Serilog: console and rolling compact-JSON file, configured from `appsettings.json` |
+| Health | Microsoft.Extensions.Diagnostics.HealthChecks (no ASP.NET Core), published to a status file read by the Docker healthcheck |
 | Serialization | System.Text.Json with source generation, for incoming messages and outgoing requests |
 | Testing | xUnit, NSubstitute, `FakeLogger` (Microsoft.Extensions.Diagnostics.Testing), coverlet |
 
@@ -86,9 +87,10 @@ The dependency rule is enforced by `RabbitMQConsumer.Test/Architecture/Dependenc
   - a single shared connection, created safely under concurrency;
   - exponential backoff while the broker is unreachable at startup;
   - automatic recovery after network failures;
-  - the channel is recreated when the broker closes it with a channel-level error.
+  - the channel is recreated when the broker closes it with a channel-level error or cancels the consumer (for example, when the queue is deleted), and consumption resumes once the queue exists again.
 - **At-least-once delivery**: manual acknowledgements, bounded prefetch (`PrefetchCount`) and ack only after the Publisher API confirms. Downstream endpoints should be idempotent by `Id`.
 - **Fail fast configuration**: options are validated when the host starts; a missing value or an invalid URL stops the service with a clear error.
+- **File-based health check**: a worker has no HTTP endpoint, so the health report is published to a file that the container healthcheck inspects. No port is opened and no extra tooling is needed in the image.
 - **Structured logging**: message templates with named properties (`{MessageId}`, `{DeliveryTag}`, …) instead of string concatenation.
 
 ## Configuration
@@ -131,6 +133,7 @@ Settings live in `RabbitMQConsumer.App/appsettings.json`:
 | `RabbitMQOptions:MaxConnectRetryDelaySeconds` | Upper bound of the backoff while the broker is unreachable |
 | `UrlOptions:PublisherApi:UpdateMessageAsProcessed` | Absolute URL called with `{ "id": … }` when a message is processed |
 | `UrlOptions:PublisherApi:AddErrorText` | Absolute URL called with `{ "id": …, "text": … }` when processing fails |
+| `HealthCheckFileOptions:FilePath` | Optional. Health status file, `/tmp/healthy` by default |
 
 All values are required, and the URLs must be absolute `http`/`https` URLs. The committed `appsettings.json` contains placeholders, so the service will not start until real values are provided. Prefer environment variables (or user secrets) for environment-specific values and credentials:
 
@@ -193,6 +196,25 @@ The repository includes a `Dockerfile` and a `docker-compose.yml` ready for Cool
 
 **Logs.** Coolify shows the console output of the container. The rolling file sink also writes to `/app/logs` inside the container; mount a volume there if those files must survive redeploys.
 
+## Health checks
+
+The service is **healthy** while the RabbitMQ connection is open and the consumer is registered on the queue. The Publisher API is not part of the check: when it fails, messages are already reported to `AddErrorText` and rejected, and restarting the consumer would not fix an external outage.
+
+- `RabbitMQHealthCheck` evaluates the state every 10 seconds (first run 5 seconds after startup).
+- `FileHealthCheckPublisher` rewrites `/tmp/healthy` on every healthy report and deletes it otherwise. Status changes are logged (`Health status changed to …`) with the reason.
+- `docker-compose.yml` defines the container healthcheck: healthy while the file exists and was updated within the last minute, so a hung process is also detected.
+
+```yaml
+healthcheck:
+  test: ["CMD-SHELL", "find /tmp/healthy -mmin -1 | grep -q ."]
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 60s
+```
+
+Coolify shows the result as *Running (healthy)* or *Running (unhealthy)*. Docker does not restart an unhealthy container by itself; the status is meant for monitoring and deployment checks.
+
 ## Testing
 
 The tests in `RabbitMQConsumer.Test` mirror the solution layers and run without a broker or network:
@@ -201,5 +223,5 @@ The tests in `RabbitMQConsumer.Test` mirror the solution layers and run without 
 |---|---|
 | `Domain/` | `Message` business rules |
 | `Application/` | `ProcessMessageUseCase`: processed, rejected and failed paths, error reporting and cancellation (no RabbitMQ mocks) |
-| `Infrastructure/` | RabbitMQ consumer (prefetch, ack/nack mapping, invalid bodies, shutdown, channel recreation), connection provider (single connection, retries, dispose), JSON HTTP client and Publisher API client |
+| `Infrastructure/` | RabbitMQ consumer (prefetch, ack/nack mapping, invalid bodies, shutdown, channel recreation, broker cancellation, consumer status), connection provider (single connection, retries, connection state, dispose), health check and status file publisher, JSON HTTP client and Publisher API client |
 | `Architecture/` | Dependency rule between layers |

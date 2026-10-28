@@ -8,6 +8,14 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    # The service rewrites /tmp/healthy every 10 seconds while it is connected to RabbitMQ and consuming the queue,
+    # and deletes it otherwise. The container is healthy while the file exists and was updated within the last minute.
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/healthy -mmin -1 | grep -q ."]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     environment:
       DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
       # Base name; each instance appends its container id, e.g. rabbitmq-consumer-3f9c2a1b7d4e

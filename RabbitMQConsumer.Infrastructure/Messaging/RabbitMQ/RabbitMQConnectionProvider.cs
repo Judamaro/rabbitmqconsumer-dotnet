@@ -14,6 +14,9 @@ public sealed class RabbitMQConnectionProvider(IOptions<RabbitMQOptions> _rabbit
     private volatile IConnection? _connection;
 
     /// <inheritdoc/>
+    public bool IsConnected => _connection?.IsOpen == true;
+
+    /// <inheritdoc/>
     public async Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken)
     {
         IConnection connection = await GetConnectionAsync(cancellationToken);

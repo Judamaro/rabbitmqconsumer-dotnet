@@ -24,6 +24,7 @@ public class RabbitMQMessageConsumerTests : IAsyncLifetime
     private readonly IProcessMessageUseCase _processMessageUseCase = Substitute.For<IProcessMessageUseCase>();
     private readonly IChannel _channel = Substitute.For<IChannel>();
     private readonly FakeLogger<RabbitMQMessageConsumer> _logger = new();
+    private readonly RabbitMQConsumerStatus _consumerStatus = new();
     private readonly ServiceProvider _serviceProvider;
     private readonly RabbitMQMessageConsumer _consumer;
     private readonly List<IAsyncBasicConsumer> _registeredConsumers = [];
@@ -38,7 +39,7 @@ public class RabbitMQMessageConsumerTests : IAsyncLifetime
         _connectionProvider.CreateChannelAsync(Arg.Any<CancellationToken>()).Returns(_channel);
         SetupConsumerCapture(_channel);
 
-        _consumer = new RabbitMQMessageConsumer(_logger, Options.Create(RabbitMQOptions), _connectionProvider, _serviceProvider.GetRequiredService<IServiceScopeFactory>());
+        _consumer = new RabbitMQMessageConsumer(_logger, Options.Create(RabbitMQOptions), _connectionProvider, _serviceProvider.GetRequiredService<IServiceScopeFactory>(), _consumerStatus);
     }
 
     public Task InitializeAsync() => Task.CompletedTask;
@@ -184,6 +185,37 @@ public class RabbitMQMessageConsumerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ConsumerStatus_IsConsumingWhileRegisteredAndStoppedAfterShutdown()
+    {
+        Assert.False(_consumerStatus.IsConsuming);
+
+        await StartAndWaitForConsumersAsync(1);
+        await WaitUntilAsync(() => _consumerStatus.IsConsuming);
+
+        await _consumer.StopAsync(CancellationToken.None);
+
+        Assert.False(_consumerStatus.IsConsuming);
+    }
+
+    [Fact]
+    public async Task ConsumerCancelledByBroker_RecreatesChannelAndConsumesAgain()
+    {
+        IChannel secondChannel = Substitute.For<IChannel>();
+        SetupConsumerCapture(secondChannel);
+        _connectionProvider.CreateChannelAsync(Arg.Any<CancellationToken>()).Returns(_channel, secondChannel);
+        await StartAndWaitForConsumersAsync(1);
+
+        IAsyncBasicConsumer firstConsumer;
+        lock (_registeredConsumers)
+            firstConsumer = _registeredConsumers[0];
+        await firstConsumer.HandleBasicCancelAsync("consumer-tag");
+
+        await WaitForConsumersAsync(2);
+        await _connectionProvider.Received(2).CreateChannelAsync(Arg.Any<CancellationToken>());
+        Assert.Contains(_logger.Collector.GetSnapshot(), record => record.Level == LogLevel.Warning && record.Message.Contains("cancelled by the broker"));
+    }
+
+    [Fact]
     public async Task ChannelClosedByBroker_RecreatesChannelAndConsumesAgain()
     {
         IChannel secondChannel = Substitute.For<IChannel>();
@@ -253,6 +285,13 @@ public class RabbitMQMessageConsumerTests : IAsyncLifetime
             }
             await Task.Delay(10, timeout.Token);
         }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        using CancellationTokenSource timeout = new(WaitTimeout);
+        while (!condition())
+            await Task.Delay(10, timeout.Token);
     }
 
     private Task<ulong> DeliverAsync(string body) => DeliverAsync(Encoding.UTF8.GetBytes(body));

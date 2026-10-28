@@ -6,7 +6,7 @@ namespace RabbitMQConsumer.Infrastructure;
 public static class DependencyInjection
 {
     /// <summary>
-    /// Registers the infrastructure adapters: validated options, the RabbitMQ consumer and connection, and the publisher API client.
+    /// Registers the infrastructure adapters: validated options, the RabbitMQ consumer and connection, the publisher API client and the health checks.
     /// </summary>
     /// <param name="serviceCollection">Service collection to register the services in.</param>
     /// <param name="configuration">Application configuration that provides the options sections.</param>
@@ -16,7 +16,8 @@ public static class DependencyInjection
         return serviceCollection
             .AddOptionsValues(configuration)
             .AddRabbitMQ()
-            .AddPublisherApi();
+            .AddPublisherApi()
+            .AddHealthStatusFile();
     }
 
     /// <summary>
@@ -39,6 +40,12 @@ public static class DependencyInjection
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        serviceCollection
+            .AddOptions<HealthCheckFileOptions>()
+            .Bind(configuration.GetSection(nameof(HealthCheckFileOptions)))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
         return serviceCollection;
     }
 
@@ -51,7 +58,30 @@ public static class DependencyInjection
     {
         serviceCollection.TryAddSingleton<IConnectionFactory>(serviceProvider => RabbitMQConnectionFactoryBuilder.Build(serviceProvider.GetRequiredService<IOptions<RabbitMQOptions>>().Value));
         serviceCollection.TryAddSingleton<IRabbitMQConnectionProvider, RabbitMQConnectionProvider>();
+        serviceCollection.TryAddSingleton<RabbitMQConsumerStatus>();
         serviceCollection.AddHostedService<RabbitMQMessageConsumer>();
+
+        return serviceCollection;
+    }
+
+    /// <summary>
+    /// Registers the RabbitMQ health check and publishes its result periodically to the health status file read by the Docker healthcheck.
+    /// </summary>
+    /// <param name="serviceCollection">Service collection to register the services in.</param>
+    /// <returns>The same <paramref name="serviceCollection"/> to allow chaining.</returns>
+    private static IServiceCollection AddHealthStatusFile(this IServiceCollection serviceCollection)
+    {
+        serviceCollection
+            .AddHealthChecks()
+            .AddCheck<RabbitMQHealthCheck>("rabbitmq");
+
+        serviceCollection.Configure<HealthCheckPublisherOptions>(options =>
+        {
+            options.Delay = TimeSpan.FromSeconds(5);
+            options.Period = TimeSpan.FromSeconds(10);
+        });
+
+        serviceCollection.TryAddEnumerable(ServiceDescriptor.Singleton<IHealthCheckPublisher, FileHealthCheckPublisher>());
 
         return serviceCollection;
     }

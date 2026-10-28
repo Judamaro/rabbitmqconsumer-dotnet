@@ -4,12 +4,12 @@ namespace RabbitMQConsumer.Infrastructure.Messaging.RabbitMQ;
 /// Consumes the RabbitMQ queue and delegates each message to <see cref="IProcessMessageUseCase"/>.
 /// Owns only transport concerns: channel lifecycle, prefetch, deserialization and ack/nack.
 /// </summary>
-public sealed class RabbitMQMessageConsumer(ILogger<RabbitMQMessageConsumer> _logger, IOptions<RabbitMQOptions> _rabbitMQOptions, IRabbitMQConnectionProvider _rabbitMQConnectionProvider, IServiceScopeFactory _serviceScopeFactory) : BackgroundService
+public sealed class RabbitMQMessageConsumer(ILogger<RabbitMQMessageConsumer> _logger, IOptions<RabbitMQOptions> _rabbitMQOptions, IRabbitMQConnectionProvider _rabbitMQConnectionProvider, IServiceScopeFactory _serviceScopeFactory, RabbitMQConsumerStatus _consumerStatus) : BackgroundService
 {
     private static readonly TimeSpan InitialRetryDelay = TimeSpan.FromSeconds(1);
 
     /// <summary>
-    /// Keeps consuming the queue until the host stops, recreating the channel after channel-level errors and retrying with exponential backoff when it cannot be created.
+    /// Keeps consuming the queue until the host stops, recreating the channel after channel-level errors or a broker cancellation and retrying with exponential backoff when it cannot be created.
     /// </summary>
     /// <param name="stoppingToken">Token signaled when the host is stopping.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -46,7 +46,7 @@ public sealed class RabbitMQMessageConsumer(ILogger<RabbitMQMessageConsumer> _lo
     }
 
     /// <summary>
-    /// Consumes from the queue until the channel is closed by a channel-level error (which automatic recovery does not handle).
+    /// Consumes from the queue until the channel is closed by a channel-level error or the broker cancels the consumer (neither is handled by automatic recovery).
     /// Connection-level failures are recovered by the client library, which also re-registers the consumer.
     /// </summary>
     private async Task ConsumeUntilChannelClosedAsync(Action onConsumerStarted, CancellationToken stoppingToken)
@@ -68,12 +68,27 @@ public sealed class RabbitMQMessageConsumer(ILogger<RabbitMQMessageConsumer> _lo
 
         AsyncEventingBasicConsumer consumer = new(channel);
         consumer.ReceivedAsync += (_, eventArgs) => HandleDeliveryAsync(channel, eventArgs, stoppingToken);
+        // The service never cancels its consumer, so this is a broker cancellation (e.g. the queue was deleted): the channel stays open but no more deliveries arrive
+        consumer.UnregisteredAsync += (_, _) =>
+        {
+            _logger.LogWarning("RabbitMQ consumer on queue {Queue} was cancelled by the broker", _rabbitMQOptions.Value.Queue);
+            channelClosed.TrySetResult();
+            return Task.CompletedTask;
+        };
 
         await channel.BasicConsumeAsync(queue: _rabbitMQOptions.Value.Queue, autoAck: false, consumer: consumer, cancellationToken: stoppingToken);
         _logger.LogInformation("Consuming messages from queue {Queue}", _rabbitMQOptions.Value.Queue);
         onConsumerStarted();
 
-        await channelClosed.Task.WaitAsync(stoppingToken);
+        _consumerStatus.MarkConsuming();
+        try
+        {
+            await channelClosed.Task.WaitAsync(stoppingToken);
+        }
+        finally
+        {
+            _consumerStatus.MarkStopped();
+        }
     }
 
     /// <summary>
