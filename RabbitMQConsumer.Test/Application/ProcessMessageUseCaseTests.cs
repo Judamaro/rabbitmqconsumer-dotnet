@@ -19,8 +19,8 @@ public class ProcessMessageUseCaseTests
         MessageProcessingResult result = await _useCase.ExecuteAsync(new MessageDto { Id = 42, Payload = "hello" }, cancellationTokenSource.Token);
 
         Assert.Equal(MessageProcessingResult.Processed, result);
-        await _publisherApiClient.Received(1).MarkAsProcessedAsync(42, cancellationTokenSource.Token);
-        await _publisherApiClient.DidNotReceiveWithAnyArgs().AddErrorMessageAsync(default, default!, default);
+        await _publisherApiClient.Received(1).UpdateMessageAsProcessedAsync(42, cancellationTokenSource.Token);
+        await _publisherApiClient.DidNotReceiveWithAnyArgs().AddErrorTextAsync(default, default!, default);
     }
 
     [Theory]
@@ -37,21 +37,21 @@ public class ProcessMessageUseCaseTests
     }
 
     [Fact]
-    public async Task MarkAsProcessedFails_ReportsErrorAndReturnsFailed()
+    public async Task UpdateMessageAsProcessedFails_ReportsErrorAndReturnsFailed()
     {
-        _publisherApiClient.MarkAsProcessedAsync(42, Arg.Any<CancellationToken>()).ThrowsAsync(new HttpRequestException("boom"));
+        _publisherApiClient.UpdateMessageAsProcessedAsync(42, Arg.Any<CancellationToken>()).ThrowsAsync(new HttpRequestException("boom"));
 
         MessageProcessingResult result = await _useCase.ExecuteAsync(new MessageDto { Id = 42, Payload = "hello" }, CancellationToken.None);
 
         Assert.Equal(MessageProcessingResult.Failed, result);
-        await _publisherApiClient.Received(1).AddErrorMessageAsync(42, "boom", Arg.Any<CancellationToken>());
+        await _publisherApiClient.Received(1).AddErrorTextAsync(42, "boom", Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task AddErrorMessageAlsoFails_ReturnsFailedAndLogsError()
+    public async Task AddErrorTextAlsoFails_ReturnsFailedAndLogsError()
     {
-        _publisherApiClient.MarkAsProcessedAsync(42, Arg.Any<CancellationToken>()).ThrowsAsync(new HttpRequestException("boom"));
-        _publisherApiClient.AddErrorMessageAsync(42, Arg.Any<string>(), Arg.Any<CancellationToken>()).ThrowsAsync(new HttpRequestException("api down"));
+        _publisherApiClient.UpdateMessageAsProcessedAsync(42, Arg.Any<CancellationToken>()).ThrowsAsync(new HttpRequestException("boom"));
+        _publisherApiClient.AddErrorTextAsync(42, Arg.Any<string>(), Arg.Any<CancellationToken>()).ThrowsAsync(new HttpRequestException("api down"));
 
         MessageProcessingResult result = await _useCase.ExecuteAsync(new MessageDto { Id = 42, Payload = "hello" }, CancellationToken.None);
 
@@ -63,7 +63,7 @@ public class ProcessMessageUseCaseTests
     public async Task CancelledWhileProcessing_PropagatesCancellationWithoutReportingError()
     {
         using CancellationTokenSource cancellationTokenSource = new();
-        _publisherApiClient.MarkAsProcessedAsync(42, Arg.Any<CancellationToken>()).Returns(async callInfo =>
+        _publisherApiClient.UpdateMessageAsProcessedAsync(42, Arg.Any<CancellationToken>()).Returns(async callInfo =>
         {
             await cancellationTokenSource.CancelAsync();
             callInfo.ArgAt<CancellationToken>(1).ThrowIfCancellationRequested();
@@ -71,7 +71,7 @@ public class ProcessMessageUseCaseTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _useCase.ExecuteAsync(new MessageDto { Id = 42, Payload = "hello" }, cancellationTokenSource.Token));
 
-        await _publisherApiClient.DidNotReceiveWithAnyArgs().AddErrorMessageAsync(default, default!, default);
+        await _publisherApiClient.DidNotReceiveWithAnyArgs().AddErrorTextAsync(default, default!, default);
     }
 
     [Fact]

@@ -20,7 +20,7 @@ public sealed class ProcessMessageUseCase(IPublisherApiClient _publisherApiClien
 
         try
         {
-            await _publisherApiClient.MarkAsProcessedAsync(message.Id, cancellationToken);
+            await _publisherApiClient.UpdateMessageAsProcessedAsync(message.Id, cancellationToken);
             return MessageProcessingResult.Processed;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -30,7 +30,7 @@ public sealed class ProcessMessageUseCase(IPublisherApiClient _publisherApiClien
         catch (Exception exception)
         {
             _logger.LogError(exception, "Message {MessageId} could not be processed: {ExceptionMessage}", message.Id, exception.Message);
-            await TryAddErrorMessageAsync(message.Id, exception.Message, cancellationToken);
+            await TryAddErrorTextAsync(message.Id, exception.Message, cancellationToken);
             return MessageProcessingResult.Failed;
         }
     }
@@ -39,13 +39,13 @@ public sealed class ProcessMessageUseCase(IPublisherApiClient _publisherApiClien
     /// Reports the processing error to the publisher API on a best-effort basis: failures are logged and never thrown, except cancellation.
     /// </summary>
     /// <param name="messageId">Identifier of the message that failed.</param>
-    /// <param name="errorMessage">Description of the error.</param>
+    /// <param name="errorText">Text describing the error.</param>
     /// <param name="cancellationToken">Token to cancel the request.</param>
-    private async Task TryAddErrorMessageAsync(int messageId, string errorMessage, CancellationToken cancellationToken)
+    private async Task TryAddErrorTextAsync(int messageId, string errorText, CancellationToken cancellationToken)
     {
         try
         {
-            await _publisherApiClient.AddErrorMessageAsync(messageId, errorMessage, cancellationToken);
+            await _publisherApiClient.AddErrorTextAsync(messageId, errorText, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

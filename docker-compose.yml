@@ -22,5 +22,5 @@ services:
       RabbitMQOptions__HeartbeatSeconds: ${RABBITMQ_HEARTBEAT_SECONDS:-30}
       RabbitMQOptions__NetworkRecoveryIntervalSeconds: ${RABBITMQ_NETWORK_RECOVERY_INTERVAL_SECONDS:-5}
       RabbitMQOptions__MaxConnectRetryDelaySeconds: ${RABBITMQ_MAX_CONNECT_RETRY_DELAY_SECONDS:-60}
-      UrlOptions__PublisherApi__MarkAsProcessed: ${PUBLISHER_API_MARK_AS_PROCESSED_URL:?}
-      UrlOptions__PublisherApi__AddErrorMessage: ${PUBLISHER_API_ADD_ERROR_MESSAGE_URL:?}
+      UrlOptions__PublisherApi__UpdateMessageAsProcessed: ${PUBLISHER_API_UPDATE_MESSAGE_AS_PROCESSED_URL:?}
+      UrlOptions__PublisherApi__AddErrorText: ${PUBLISHER_API_ADD_ERROR_TEXT_URL:?}

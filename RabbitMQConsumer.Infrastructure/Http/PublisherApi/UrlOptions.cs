@@ -14,8 +14,8 @@ public record UrlOptions
     public record PublisherApiOptions
     {
         [Required, Url]
-        public required string MarkAsProcessed { get; init; }
+        public required string UpdateMessageAsProcessed { get; init; }
         [Required, Url]
-        public required string AddErrorMessage { get; init; }
+        public required string AddErrorText { get; init; }
     }
 }

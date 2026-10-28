@@ -2,8 +2,8 @@ namespace RabbitMQConsumer.Test.Infrastructure;
 
 public class PublisherApiClientTests
 {
-    private const string MarkAsProcessedUrl = "http://publisher.test/mark-as-processed";
-    private const string AddErrorMessageUrl = "http://publisher.test/add-error-message";
+    private const string UpdateMessageAsProcessedUrl = "http://publisher.test/update-message-as-processed";
+    private const string AddErrorTextUrl = "http://publisher.test/add-error-text";
 
     private readonly IJsonHttpClient _jsonHttpClient = Substitute.For<IJsonHttpClient>();
     private readonly PublisherApiClient _repository;
@@ -12,67 +12,67 @@ public class PublisherApiClientTests
     {
         IOptions<UrlOptions> urlOptions = Options.Create(new UrlOptions
         {
-            PublisherApi = new() { MarkAsProcessed = MarkAsProcessedUrl, AddErrorMessage = AddErrorMessageUrl }
+            PublisherApi = new() { UpdateMessageAsProcessed = UpdateMessageAsProcessedUrl, AddErrorText = AddErrorTextUrl }
         });
         _repository = new PublisherApiClient(urlOptions, _jsonHttpClient);
     }
 
     [Fact]
-    public async Task MarkAsProcessedAsync_PostsMessageIdToMarkAsProcessedUrl()
+    public async Task UpdateMessageAsProcessedAsync_PostsMessageIdToUpdateMessageAsProcessedUrl()
     {
         using CancellationTokenSource cancellationTokenSource = new();
         TrackingHttpResponseMessage response = SetupResponse(HttpStatusCode.OK);
 
-        await _repository.MarkAsProcessedAsync(7, cancellationTokenSource.Token);
+        await _repository.UpdateMessageAsProcessedAsync(7, cancellationTokenSource.Token);
 
-        await _jsonHttpClient.Received(1).SendPostAsync(MarkAsProcessedUrl, new MessageAsProcessedDto { Id = 7 }, cancellationTokenSource.Token);
+        await _jsonHttpClient.Received(1).SendPostAsync(UpdateMessageAsProcessedUrl, new UpdateMessageAsProcessedDto { Id = 7 }, cancellationTokenSource.Token);
         Assert.True(response.Disposed);
     }
 
     [Fact]
-    public async Task AddErrorMessageAsync_PostsErrorToAddErrorMessageUrl()
+    public async Task AddErrorTextAsync_PostsErrorToAddErrorTextUrl()
     {
         using CancellationTokenSource cancellationTokenSource = new();
         TrackingHttpResponseMessage response = SetupResponse(HttpStatusCode.OK);
 
-        await _repository.AddErrorMessageAsync(7, "boom", cancellationTokenSource.Token);
+        await _repository.AddErrorTextAsync(7, "boom", cancellationTokenSource.Token);
 
-        await _jsonHttpClient.Received(1).SendPostAsync(AddErrorMessageUrl, new ErrorMessageDto { Id = 7, Text = "boom" }, cancellationTokenSource.Token);
+        await _jsonHttpClient.Received(1).SendPostAsync(AddErrorTextUrl, new AddErrorTextDto { Id = 7, Text = "boom" }, cancellationTokenSource.Token);
         Assert.True(response.Disposed);
     }
 
     [Fact]
-    public async Task MarkAsProcessedAsync_ErrorResponse_ThrowsHttpRequestExceptionWithStatusAndBody()
+    public async Task UpdateMessageAsProcessedAsync_ErrorResponse_ThrowsHttpRequestExceptionWithStatusAndBody()
     {
         TrackingHttpResponseMessage response = SetupResponse(HttpStatusCode.BadRequest, "{\"message\":\"invalid id\"}");
 
-        HttpRequestException exception = await Assert.ThrowsAsync<HttpRequestException>(() => _repository.MarkAsProcessedAsync(7));
+        HttpRequestException exception = await Assert.ThrowsAsync<HttpRequestException>(() => _repository.UpdateMessageAsProcessedAsync(7));
 
         Assert.Equal(HttpStatusCode.BadRequest, exception.StatusCode);
-        Assert.Contains(MarkAsProcessedUrl, exception.Message);
+        Assert.Contains(UpdateMessageAsProcessedUrl, exception.Message);
         Assert.Contains("400", exception.Message);
         Assert.Contains("invalid id", exception.Message);
         Assert.True(response.Disposed);
     }
 
     [Fact]
-    public async Task AddErrorMessageAsync_ErrorResponse_ThrowsHttpRequestException()
+    public async Task AddErrorTextAsync_ErrorResponse_ThrowsHttpRequestException()
     {
         TrackingHttpResponseMessage response = SetupResponse(HttpStatusCode.InternalServerError);
 
-        HttpRequestException exception = await Assert.ThrowsAsync<HttpRequestException>(() => _repository.AddErrorMessageAsync(7, "boom"));
+        HttpRequestException exception = await Assert.ThrowsAsync<HttpRequestException>(() => _repository.AddErrorTextAsync(7, "boom"));
 
         Assert.Equal(HttpStatusCode.InternalServerError, exception.StatusCode);
         Assert.True(response.Disposed);
     }
 
     [Fact]
-    public async Task MarkAsProcessedAsync_HttpClientThrows_PropagatesException()
+    public async Task UpdateMessageAsProcessedAsync_HttpClientThrows_PropagatesException()
     {
         _jsonHttpClient.SendPostAsync(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new HttpRequestException("connection refused"));
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => _repository.MarkAsProcessedAsync(7));
+        await Assert.ThrowsAsync<HttpRequestException>(() => _repository.UpdateMessageAsProcessedAsync(7));
     }
 
     private TrackingHttpResponseMessage SetupResponse(HttpStatusCode statusCode, string body = "")

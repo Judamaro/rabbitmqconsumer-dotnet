@@ -10,7 +10,7 @@ flowchart LR
     Queue -->|deliver| Consumer[RabbitMQMessageConsumer]
     Consumer -->|MessageDto| UseCase[ProcessMessageUseCase]
     UseCase -->|validate| Domain[Message]
-    UseCase -->|MarkAsProcessed / AddErrorMessage| Api[Publisher API]
+    UseCase -->|UpdateMessageAsProcessed / AddErrorText| Api[Publisher API]
     Consumer -->|ack / nack| Queue
 ```
 
@@ -20,9 +20,9 @@ Each delivery is deserialized, handed to the use case and then acknowledged acco
 
 | Result | When | Broker action |
 |---|---|---|
-| `Processed` | The message is valid and the Publisher API accepted `MarkAsProcessed` | `ack` |
+| `Processed` | The message is valid and the Publisher API accepted `UpdateMessageAsProcessed` | `ack` |
 | `Rejected` | The body is empty or not valid JSON, or the message breaks a domain rule (`Id` must be greater than zero, `Payload` must not be empty) | `nack` without requeue |
-| `Failed` | The message is valid but `MarkAsProcessed` failed after all retries; the error is sent to `AddErrorMessage` | `nack` without requeue |
+| `Failed` | The message is valid but `UpdateMessageAsProcessed` failed after all retries; the error is sent to `AddErrorText` | `nack` without requeue |
 | — | The service is shutting down while a message is in flight | No ack: the broker redelivers it |
 
 Rejected and failed messages are not requeued, so a poison message cannot block the queue. Configure a dead-letter exchange (`x-dead-letter-exchange`) on the queue to keep them for inspection.
@@ -112,8 +112,8 @@ Settings live in `RabbitMQConsumer.App/appsettings.json`:
   },
   "UrlOptions": {
     "PublisherApi": {
-      "MarkAsProcessed": "http://localhost:5000/messages/mark-as-processed",
-      "AddErrorMessage": "http://localhost:5000/messages/add-error-message"
+      "UpdateMessageAsProcessed": "http://localhost:5000/messages/update-message-as-processed",
+      "AddErrorText": "http://localhost:5000/messages/add-error-text"
     }
   }
 }
@@ -129,15 +129,15 @@ Settings live in `RabbitMQConsumer.App/appsettings.json`:
 | `RabbitMQOptions:HeartbeatSeconds` | Heartbeat interval used to detect dead connections |
 | `RabbitMQOptions:NetworkRecoveryIntervalSeconds` | Wait between automatic recovery attempts |
 | `RabbitMQOptions:MaxConnectRetryDelaySeconds` | Upper bound of the backoff while the broker is unreachable |
-| `UrlOptions:PublisherApi:MarkAsProcessed` | Absolute URL called with `{ "id": … }` when a message is processed |
-| `UrlOptions:PublisherApi:AddErrorMessage` | Absolute URL called with `{ "id": …, "text": … }` when processing fails |
+| `UrlOptions:PublisherApi:UpdateMessageAsProcessed` | Absolute URL called with `{ "id": … }` when a message is processed |
+| `UrlOptions:PublisherApi:AddErrorText` | Absolute URL called with `{ "id": …, "text": … }` when processing fails |
 
 All values are required, and the URLs must be absolute `http`/`https` URLs. The committed `appsettings.json` contains placeholders, so the service will not start until real values are provided. Prefer environment variables (or user secrets) for environment-specific values and credentials:
 
 ```bash
 export RabbitMQOptions__Host=localhost
 export RabbitMQOptions__Pwd=guest
-export UrlOptions__PublisherApi__MarkAsProcessed=http://localhost:5000/messages/mark-as-processed
+export UrlOptions__PublisherApi__UpdateMessageAsProcessed=http://localhost:5000/messages/update-message-as-processed
 ```
 
 ## Getting started
@@ -183,8 +183,8 @@ The repository includes a `Dockerfile` and a `docker-compose.yml` ready for Cool
 | `RABBITMQ_HEARTBEAT_SECONDS` | `RabbitMQOptions:HeartbeatSeconds` | `30` |
 | `RABBITMQ_NETWORK_RECOVERY_INTERVAL_SECONDS` | `RabbitMQOptions:NetworkRecoveryIntervalSeconds` | `5` |
 | `RABBITMQ_MAX_CONNECT_RETRY_DELAY_SECONDS` | `RabbitMQOptions:MaxConnectRetryDelaySeconds` | `60` |
-| `PUBLISHER_API_MARK_AS_PROCESSED_URL` | `UrlOptions:PublisherApi:MarkAsProcessed` | required |
-| `PUBLISHER_API_ADD_ERROR_MESSAGE_URL` | `UrlOptions:PublisherApi:AddErrorMessage` | required |
+| `PUBLISHER_API_UPDATE_MESSAGE_AS_PROCESSED_URL` | `UrlOptions:PublisherApi:UpdateMessageAsProcessed` | required |
+| `PUBLISHER_API_ADD_ERROR_TEXT_URL` | `UrlOptions:PublisherApi:AddErrorText` | required |
 | `DOTNET_ENVIRONMENT` | Hosting environment | `Production` |
 
 **Instance name.** The connection to RabbitMQ is named `{RABBITMQ_CLIENT_NAME}-{container id}`, for example `rabbitmq-consumer-3f9c2a1b7d4e`. It appears in the RabbitMQ management UI under *Connections* and in the startup logs (`Connecting to RabbitMQ … as …`), so each running container can be identified without configuring a name per instance.

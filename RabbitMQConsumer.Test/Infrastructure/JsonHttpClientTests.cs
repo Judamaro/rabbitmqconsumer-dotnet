@@ -16,7 +16,7 @@ public class JsonHttpClientTests
     [Fact]
     public async Task SendPostAsync_PostsBodyAsBufferedCamelCaseJson()
     {
-        using HttpResponseMessage response = await _repository.SendPostAsync(Url, new MessageAsProcessedDto { Id = 7 });
+        using HttpResponseMessage response = await _repository.SendPostAsync(Url, new UpdateMessageAsProcessedDto { Id = 7 });
 
         Assert.Equal(HttpMethod.Post, _handler.Request!.Method);
         Assert.Equal(Url, _handler.Request.RequestUri!.ToString());
@@ -29,7 +29,7 @@ public class JsonHttpClientTests
     [Fact]
     public async Task SendPostAsync_SerializesRuntimeTypeOfBody()
     {
-        object body = new ErrorMessageDto { Id = 3, Text = "boom" };
+        object body = new AddErrorTextDto { Id = 3, Text = "boom" };
 
         using HttpResponseMessage response = await _repository.SendPostAsync(Url, body);
 

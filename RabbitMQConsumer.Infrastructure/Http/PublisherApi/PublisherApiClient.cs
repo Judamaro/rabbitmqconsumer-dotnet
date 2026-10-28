@@ -8,12 +8,12 @@ namespace RabbitMQConsumer.Infrastructure.Http.PublisherApi;
 public class PublisherApiClient(IOptions<UrlOptions> _urlOptions, IJsonHttpClient _jsonHttpClient) : IPublisherApiClient
 {
     /// <inheritdoc/>
-    public Task AddErrorMessageAsync(int id, string errorMessage, CancellationToken cancellationToken = default)
-        => SendPostAsync(_urlOptions.Value.PublisherApi.AddErrorMessage, new ErrorMessageDto() { Id = id, Text = errorMessage }, cancellationToken);
+    public Task AddErrorTextAsync(int id, string errorText, CancellationToken cancellationToken = default)
+        => SendPostAsync(_urlOptions.Value.PublisherApi.AddErrorText, new AddErrorTextDto() { Id = id, Text = errorText }, cancellationToken);
 
     /// <inheritdoc/>
-    public Task MarkAsProcessedAsync(int id, CancellationToken cancellationToken = default)
-        => SendPostAsync(_urlOptions.Value.PublisherApi.MarkAsProcessed, new MessageAsProcessedDto() { Id = id }, cancellationToken);
+    public Task UpdateMessageAsProcessedAsync(int id, CancellationToken cancellationToken = default)
+        => SendPostAsync(_urlOptions.Value.PublisherApi.UpdateMessageAsProcessed, new UpdateMessageAsProcessedDto() { Id = id }, cancellationToken);
 
     /// <summary>
     /// Sends the request and disposes the response, throwing when the publisher API does not return a success status code.
