@@ -121,7 +121,7 @@ Settings live in `RabbitMQConsumer.App/appsettings.json`:
 
 | Key | Description |
 |---|---|
-| `RabbitMQOptions:Name` | Connection name shown in the RabbitMQ management UI |
+| `RabbitMQOptions:Name` | Base connection name. Each instance appends its machine name (the container id in Docker), so the RabbitMQ management UI shows one unique name per instance, e.g. `rabbitmq-consumer-3f9c2a1b7d4e` |
 | `RabbitMQOptions:Host`, `Port`, `VirtualHost` | Broker address |
 | `RabbitMQOptions:User`, `Pwd` | Broker credentials |
 | `RabbitMQOptions:Queue` | Queue to consume from |
@@ -162,6 +162,36 @@ Run the tests:
 ```bash
 dotnet test RabbitMQConsumer.slnx
 ```
+
+## Deployment (Coolify)
+
+The repository includes a `Dockerfile` and a `docker-compose.yml` ready for Coolify's **Docker Compose** build pack.
+
+- **Image**: multi-stage build on the official .NET 10 images. The final image uses the .NET runtime only (no ASP.NET Core) and runs as a non-root user.
+- **Configuration**: `docker-compose.yml` maps Coolify environment variables to the configuration keys. Coolify lists them in the resource's *Environment Variables* tab: variables written as `${VAR:?}` are required, and `${VAR:-value}` have a default. They override `appsettings.json`, and the service still validates them on startup.
+
+| Coolify variable | Configuration key | Default |
+|---|---|---|
+| `RABBITMQ_CLIENT_NAME` | `RabbitMQOptions:Name` | `rabbitmq-consumer` |
+| `RABBITMQ_HOST` | `RabbitMQOptions:Host` | required |
+| `RABBITMQ_PORT` | `RabbitMQOptions:Port` | `5672` |
+| `RABBITMQ_VIRTUAL_HOST` | `RabbitMQOptions:VirtualHost` | `/` |
+| `RABBITMQ_USER` | `RabbitMQOptions:User` | required |
+| `RABBITMQ_PASSWORD` | `RabbitMQOptions:Pwd` | required |
+| `RABBITMQ_QUEUE` | `RabbitMQOptions:Queue` | required |
+| `RABBITMQ_PREFETCH_COUNT` | `RabbitMQOptions:PrefetchCount` | `10` |
+| `RABBITMQ_HEARTBEAT_SECONDS` | `RabbitMQOptions:HeartbeatSeconds` | `30` |
+| `RABBITMQ_NETWORK_RECOVERY_INTERVAL_SECONDS` | `RabbitMQOptions:NetworkRecoveryIntervalSeconds` | `5` |
+| `RABBITMQ_MAX_CONNECT_RETRY_DELAY_SECONDS` | `RabbitMQOptions:MaxConnectRetryDelaySeconds` | `60` |
+| `PUBLISHER_API_MARK_AS_PROCESSED_URL` | `UrlOptions:PublisherApi:MarkAsProcessed` | required |
+| `PUBLISHER_API_ADD_ERROR_MESSAGE_URL` | `UrlOptions:PublisherApi:AddErrorMessage` | required |
+| `DOTNET_ENVIRONMENT` | Hosting environment | `Production` |
+
+**Instance name.** The connection to RabbitMQ is named `{RABBITMQ_CLIENT_NAME}-{container id}`, for example `rabbitmq-consumer-3f9c2a1b7d4e`. It appears in the RabbitMQ management UI under *Connections* and in the startup logs (`Connecting to RabbitMQ … as …`), so each running container can be identified without configuring a name per instance.
+
+**Instances.** The compose file runs a single instance. Coolify assigns a fixed container name to every compose service, so `deploy.replicas` is not supported. To run more consumers, add another service to the compose file or deploy another resource; each one gets its own connection name automatically.
+
+**Logs.** Coolify shows the console output of the container. The rolling file sink also writes to `/app/logs` inside the container; mount a volume there if those files must survive redeploys.
 
 ## Testing
 

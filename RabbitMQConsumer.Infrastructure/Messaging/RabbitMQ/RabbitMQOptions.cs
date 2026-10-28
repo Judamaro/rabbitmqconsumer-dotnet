@@ -5,6 +5,10 @@ namespace RabbitMQConsumer.Infrastructure.Messaging.RabbitMQ;
 /// </summary>
 public record RabbitMQOptions
 {
+    /// <summary>
+    /// Base connection name shared by all the instances. Each instance appends its own identifier (the container id in Docker),
+    /// so the connection name shown in RabbitMQ is unique per instance, e.g. <c>rabbitmq-consumer-3f9c2a1b7d4e</c>.
+    /// </summary>
     [Required]
     public required string Name { get; init; }
     [Required]

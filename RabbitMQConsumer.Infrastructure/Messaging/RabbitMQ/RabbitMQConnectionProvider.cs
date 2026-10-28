@@ -54,6 +54,8 @@ public sealed class RabbitMQConnectionProvider(IOptions<RabbitMQOptions> _rabbit
         TimeSpan retryDelay = InitialRetryDelay;
         int attempt = 0;
 
+        _logger.LogInformation("Connecting to RabbitMQ {Host}:{Port}{VirtualHost} as {ClientProvidedName}", _rabbitMQOptions.Value.Host, _rabbitMQOptions.Value.Port, _rabbitMQOptions.Value.VirtualHost, _connectionFactory.ClientProvidedName);
+
         while (true)
         {
             attempt++;
@@ -61,7 +63,7 @@ public sealed class RabbitMQConnectionProvider(IOptions<RabbitMQOptions> _rabbit
             {
                 IConnection connection = await _connectionFactory.CreateConnectionAsync(cancellationToken);
                 SubscribeToConnectionEvents(connection);
-                _logger.LogInformation("Connected to RabbitMQ {Host}:{Port}{VirtualHost} after {Attempt} attempt(s)", _rabbitMQOptions.Value.Host, _rabbitMQOptions.Value.Port, _rabbitMQOptions.Value.VirtualHost, attempt);
+                _logger.LogInformation("Connected to RabbitMQ {Host}:{Port}{VirtualHost} as {ClientProvidedName} after {Attempt} attempt(s)", _rabbitMQOptions.Value.Host, _rabbitMQOptions.Value.Port, _rabbitMQOptions.Value.VirtualHost, _connectionFactory.ClientProvidedName, attempt);
                 return connection;
             }
             catch (Exception exception) when (exception is BrokerUnreachableException or ConnectFailureException or OperationInterruptedException)

@@ -1,0 +1,26 @@
+# Deployment for Coolify (Docker Compose build pack).
+# Values come from the Environment Variables tab in Coolify: ${VAR:?} is required, ${VAR:-value} has a default.
+# Coolify assigns a fixed container_name to each service, so deploy.replicas is not supported:
+# to run another instance, add another service or deploy another resource.
+services:
+  rabbitmq-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Production}
+      # Base name; each instance appends its container id, e.g. rabbitmq-consumer-3f9c2a1b7d4e
+      RabbitMQOptions__Name: ${RABBITMQ_CLIENT_NAME:-rabbitmq-consumer}
+      RabbitMQOptions__Host: ${RABBITMQ_HOST:?}
+      RabbitMQOptions__Port: ${RABBITMQ_PORT:-5672}
+      RabbitMQOptions__VirtualHost: ${RABBITMQ_VIRTUAL_HOST:-/}
+      RabbitMQOptions__User: ${RABBITMQ_USER:?}
+      RabbitMQOptions__Pwd: ${RABBITMQ_PASSWORD:?}
+      RabbitMQOptions__Queue: ${RABBITMQ_QUEUE:?}
+      RabbitMQOptions__PrefetchCount: ${RABBITMQ_PREFETCH_COUNT:-10}
+      RabbitMQOptions__HeartbeatSeconds: ${RABBITMQ_HEARTBEAT_SECONDS:-30}
+      RabbitMQOptions__NetworkRecoveryIntervalSeconds: ${RABBITMQ_NETWORK_RECOVERY_INTERVAL_SECONDS:-5}
+      RabbitMQOptions__MaxConnectRetryDelaySeconds: ${RABBITMQ_MAX_CONNECT_RETRY_DELAY_SECONDS:-60}
+      UrlOptions__PublisherApi__MarkAsProcessed: ${PUBLISHER_API_MARK_AS_PROCESSED_URL:?}
+      UrlOptions__PublisherApi__AddErrorMessage: ${PUBLISHER_API_ADD_ERROR_MESSAGE_URL:?}

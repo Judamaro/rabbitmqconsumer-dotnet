@@ -138,11 +138,23 @@ public class RabbitMQConnectionProviderTests
     }
 
     [Fact]
-    public void RabbitConnectionFactoryBuilder_MapsOptionsAndEnablesRecovery()
+    public async Task CreateChannelAsync_LogsInstanceConnectionName()
     {
-        ConnectionFactory connectionFactory = RabbitMQConnectionFactoryBuilder.Build(RabbitMQOptions);
+        _connectionFactory.ClientProvidedName.Returns("consumer-test-3f9c2a1b7d4e");
+        _connectionFactory.CreateConnectionAsync(Arg.Any<CancellationToken>()).Returns(_connection);
 
-        Assert.Equal(RabbitMQOptions.Name, connectionFactory.ClientProvidedName);
+        await _repository.CreateChannelAsync(CancellationToken.None);
+
+        Assert.Contains(_logger.Collector.GetSnapshot(), record => record.Level == LogLevel.Information && record.Message.Contains("Connecting to RabbitMQ") && record.Message.Contains("as consumer-test-3f9c2a1b7d4e"));
+        Assert.Contains(_logger.Collector.GetSnapshot(), record => record.Level == LogLevel.Information && record.Message.Contains("Connected to RabbitMQ") && record.Message.Contains("as consumer-test-3f9c2a1b7d4e"));
+    }
+
+    [Fact]
+    public void RabbitMQConnectionFactoryBuilder_MapsOptionsAndEnablesRecovery()
+    {
+        ConnectionFactory connectionFactory = RabbitMQConnectionFactoryBuilder.Build(RabbitMQOptions, "instance-1");
+
+        Assert.Equal("consumer-test-instance-1", connectionFactory.ClientProvidedName);
         Assert.Equal(RabbitMQOptions.Host, connectionFactory.HostName);
         Assert.Equal(RabbitMQOptions.Port, connectionFactory.Port);
         Assert.Equal(RabbitMQOptions.VirtualHost, connectionFactory.VirtualHost);
@@ -152,5 +164,21 @@ public class RabbitMQConnectionProviderTests
         Assert.Equal(TimeSpan.FromSeconds(RabbitMQOptions.NetworkRecoveryIntervalSeconds), connectionFactory.NetworkRecoveryInterval);
         Assert.True(connectionFactory.AutomaticRecoveryEnabled);
         Assert.True(connectionFactory.TopologyRecoveryEnabled);
+    }
+
+    [Fact]
+    public void RabbitMQConnectionFactoryBuilder_WithoutInstanceId_UsesMachineName()
+    {
+        ConnectionFactory connectionFactory = RabbitMQConnectionFactoryBuilder.Build(RabbitMQOptions);
+
+        Assert.Equal($"{RabbitMQOptions.Name}-{Environment.MachineName}", connectionFactory.ClientProvidedName);
+    }
+
+    [Theory]
+    [InlineData("", "instance-1")]
+    [InlineData("consumer", " ")]
+    public void BuildClientProvidedName_EmptyValue_ThrowsArgumentException(string name, string instanceId)
+    {
+        Assert.ThrowsAny<ArgumentException>(() => RabbitMQConnectionFactoryBuilder.BuildClientProvidedName(name, instanceId));
     }
 }
