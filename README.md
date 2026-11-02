@@ -27,6 +27,160 @@ Each delivery is deserialized, handed to the use case and then acknowledged acco
 
 Rejected and failed messages are not requeued, so a poison message cannot block the queue. Configure a dead-letter exchange (`x-dead-letter-exchange`) on the queue to keep them for inspection.
 
+## Sequence diagrams
+
+### Startup and connection
+
+The host validates the options, then the consumer opens the shared connection (retrying with exponential backoff while the broker is unreachable) and registers on the queue.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Host as Generic Host
+    participant Consumer as RabbitMQMessageConsumer
+    participant Provider as RabbitMQConnectionProvider
+    participant Broker as RabbitMQ
+    participant Status as RabbitMQConsumerStatus
+
+    Host->>Host: Validate RabbitMQOptions, UrlOptions and HealthCheckFileOptions
+    Host->>Consumer: StartAsync
+    Consumer->>Provider: CreateChannelAsync
+    loop Until the broker is reachable
+        Provider->>Broker: CreateConnectionAsync as name-instanceId
+        alt Broker unreachable
+            Broker-->>Provider: BrokerUnreachableException
+            Provider->>Provider: Wait 1 s, 2 s, 4 s ... up to MaxConnectRetryDelaySeconds
+        else Connected
+            Broker-->>Provider: Connection (automatic recovery enabled)
+        end
+    end
+    Provider->>Broker: Open channel
+    Provider-->>Consumer: Channel
+    Consumer->>Broker: basic.qos (PrefetchCount)
+    Consumer->>Broker: basic.consume (Queue, manual ack)
+    Consumer->>Status: MarkConsuming
+```
+
+### Message processing
+
+Each delivery runs in its own dependency scope. The message is acknowledged only after the Publisher API confirms it.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Broker as RabbitMQ
+    participant Consumer as RabbitMQMessageConsumer
+    participant UseCase as ProcessMessageUseCase
+    participant Domain as Message
+    participant Client as PublisherApiClient
+    participant Api as Publisher API
+
+    Broker->>Consumer: Delivery (body, delivery tag)
+    Consumer->>Consumer: Deserialize MessageDto (System.Text.Json)
+    alt Empty body or invalid JSON
+        Consumer->>Broker: basic.nack (requeue = false)
+    else Valid JSON
+        Consumer->>UseCase: ExecuteAsync(MessageDto) in a new scope
+        UseCase->>Domain: TryCreate(id, payload)
+        alt Domain rule broken
+            Domain-->>UseCase: Validation error
+            UseCase-->>Consumer: Rejected
+            Consumer->>Broker: basic.nack (requeue = false)
+        else Valid message
+            UseCase->>Client: UpdateMessageAsProcessedAsync(id)
+            Client->>Api: POST UpdateMessageAsProcessed { id }
+            alt Success
+                Api-->>Client: 2xx
+                UseCase-->>Consumer: Processed
+                Consumer->>Broker: basic.ack
+            else Failure after retries, timeouts or open circuit
+                Api-->>Client: Error
+                Client-->>UseCase: HttpRequestException
+                UseCase->>Client: AddErrorTextAsync(id, error) best effort
+                Client->>Api: POST AddErrorText { id, text }
+                UseCase-->>Consumer: Failed
+                Consumer->>Broker: basic.nack (requeue = false)
+            end
+        end
+    end
+    Note over Consumer,Broker: If the host stops while a message is in flight, it is not acknowledged and the broker redelivers it
+```
+
+### Failure recovery
+
+Connection failures are recovered by the client library. Channel closures and broker cancellations (for example, a deleted queue) are handled by the consumer, which creates a new channel and subscribes again.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Broker as RabbitMQ
+    participant Provider as RabbitMQConnectionProvider
+    participant Consumer as RabbitMQMessageConsumer
+    participant Status as RabbitMQConsumerStatus
+
+    alt Connection lost (network failure, broker restart)
+        Broker--xProvider: Connection shutdown
+        loop Every NetworkRecoveryIntervalSeconds
+            Provider->>Broker: Reconnect
+        end
+        Broker-->>Provider: Connection recovered
+        Note over Provider,Consumer: Channels, QoS and the consumer are restored automatically
+    else Channel closed by the broker or consumer cancelled (queue deleted)
+        Broker--xConsumer: channel.close or basic.cancel
+        Consumer->>Status: MarkStopped
+        loop Until basic.consume succeeds
+            Consumer->>Provider: CreateChannelAsync
+            Consumer->>Broker: basic.qos and basic.consume
+            alt Queue still missing
+                Broker-->>Consumer: 404 NOT_FOUND, channel closed
+                Consumer->>Consumer: Wait with exponential backoff
+            else Queue available
+                Broker-->>Consumer: basic.consume-ok
+                Consumer->>Status: MarkConsuming
+            end
+        end
+    end
+```
+
+### Health check
+
+The health report is published to a file every 10 seconds, and the container healthcheck reads that file.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Publisher as HealthCheckPublisherHostedService
+    participant Check as RabbitMQHealthCheck
+    participant Provider as RabbitMQConnectionProvider
+    participant Status as RabbitMQConsumerStatus
+    participant File as FileHealthCheckPublisher
+    participant Docker as Docker healthcheck
+    participant Coolify
+
+    loop Every 10 seconds
+        Publisher->>Check: CheckHealthAsync
+        Check->>Provider: IsConnected
+        Check->>Status: IsConsuming
+        alt Connected and consuming
+            Check-->>Publisher: Healthy
+            Publisher->>File: PublishAsync(Healthy)
+            File->>File: Rewrite /tmp/healthy
+        else Otherwise
+            Check-->>Publisher: Unhealthy with reason
+            Publisher->>File: PublishAsync(Unhealthy)
+            File->>File: Delete /tmp/healthy and log the reason
+        end
+    end
+    loop Every 30 seconds
+        Docker->>File: find /tmp/healthy -mmin -1
+        alt File updated within the last minute
+            Docker-->>Coolify: healthy
+        else Missing or stale (3 consecutive failures)
+            Docker-->>Coolify: unhealthy
+        end
+    end
+```
+
 ## Architecture
 
 The solution follows **Clean Architecture**: dependencies only point inwards, so the business rules know nothing about RabbitMQ, HTTP or JSON.
@@ -52,7 +206,9 @@ RabbitMQConsumer.Application/
 ├── Messages/ (MessageDto, IProcessMessageUseCase, ProcessMessageUseCase, MessageProcessingResult)
 └── DependencyInjection.cs
 RabbitMQConsumer.Infrastructure/
-├── Messaging/RabbitMQ/ (RabbitMQMessageConsumer, RabbitMQConnectionProvider, RabbitMQConnectionFactoryBuilder, RabbitMQOptions)
+├── Messaging/RabbitMQ/ (RabbitMQMessageConsumer, RabbitMQConnectionProvider, RabbitMQConnectionFactoryBuilder, RabbitMQOptions,
+│                        RabbitMQConsumerStatus, RabbitMQHealthCheck)
+├── Health/ (FileHealthCheckPublisher, HealthCheckFileOptions)
 ├── Http/ (JsonHttpClient)
 ├── Http/PublisherApi/ (PublisherApiClient, UrlOptions, Contracts/)
 └── DependencyInjection.cs
