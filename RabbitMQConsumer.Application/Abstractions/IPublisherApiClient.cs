@@ -7,6 +7,7 @@ public interface IPublisherApiClient
 {
     /// <summary>
     /// Notifies the publisher API that the message has been processed successfully.
+    /// A message that is already marked as processed (e.g. a redelivery) is also treated as success.
     /// </summary>
     /// <param name="id">Identifier of the processed message.</param>
     /// <param name="cancellationToken">Token to cancel the request.</param>

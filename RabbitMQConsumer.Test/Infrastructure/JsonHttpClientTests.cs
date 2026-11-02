@@ -16,7 +16,7 @@ public class JsonHttpClientTests
     [Fact]
     public async Task SendPostAsync_PostsBodyAsBufferedCamelCaseJson()
     {
-        using HttpResponseMessage response = await _repository.SendPostAsync(Url, new UpdateMessageAsProcessedDto { Id = 7 });
+        using HttpResponseMessage response = await _repository.SendPostAsync(Url, new { Id = 7 });
 
         Assert.Equal(HttpMethod.Post, _handler.Request!.Method);
         Assert.Equal(Url, _handler.Request.RequestUri!.ToString());
@@ -29,11 +29,11 @@ public class JsonHttpClientTests
     [Fact]
     public async Task SendPostAsync_SerializesRuntimeTypeOfBody()
     {
-        object body = new AddErrorTextDto { Id = 3, Text = "boom" };
+        object body = new AddErrorTextDto { MessageId = 3, Text = "boom" };
 
         using HttpResponseMessage response = await _repository.SendPostAsync(Url, body);
 
-        Assert.Equal("{\"id\":3,\"text\":\"boom\"}", _handler.RequestBody);
+        Assert.Equal("{\"messageId\":3,\"text\":\"boom\"}", _handler.RequestBody);
     }
 
     [Fact]
@@ -56,8 +56,40 @@ public class JsonHttpClientTests
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         FakeLogRecord warning = Assert.Single(_logger.Collector.GetSnapshot(), record => record.Level == LogLevel.Warning);
-        Assert.Contains(Url, warning.Message);
+        Assert.Contains($"POST {Url}", warning.Message);
         Assert.Contains("500", warning.Message);
+    }
+
+    [Fact]
+    public async Task SendPatchAsync_SendsPatchWithoutBody()
+    {
+        using HttpResponseMessage response = await _repository.SendPatchAsync(Url);
+
+        Assert.Equal(HttpMethod.Patch, _handler.Request!.Method);
+        Assert.Equal(Url, _handler.Request.RequestUri!.ToString());
+        Assert.Null(_handler.RequestBody);
+    }
+
+    [Fact]
+    public async Task SendPatchAsync_ErrorResponse_ReturnsResponseAndLogsWarning()
+    {
+        _handler.ResponseStatusCode = HttpStatusCode.NotFound;
+
+        using HttpResponseMessage response = await _repository.SendPatchAsync(Url);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        FakeLogRecord warning = Assert.Single(_logger.Collector.GetSnapshot(), record => record.Level == LogLevel.Warning);
+        Assert.Contains($"PATCH {Url}", warning.Message);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SendPatchAsync_InvalidUrl_ThrowsArgumentException(string? url)
+    {
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => _repository.SendPatchAsync(url!));
+        Assert.Null(_handler.Request);
     }
 
     [Theory]

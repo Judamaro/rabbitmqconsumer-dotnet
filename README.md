@@ -16,11 +16,19 @@ flowchart LR
 
 ## Message flow
 
+The consumer reads the envelope published by [rabbitmqpublisher-dotnet](https://github.com/Judamaro/rabbitmqpublisher-dotnet):
+
+```json
+{ "Id": 42, "Payload": "{\"orderId\":1}", "Type": "order.created" }
+```
+
+`Id` is the message id stored by the publisher and `Payload` is the original JSON as a string. Property names are matched in any casing, and `Type` is ignored: every message on the queue is processed the same way.
+
 Each delivery is deserialized, handed to the use case and then acknowledged according to the result:
 
 | Result | When | Broker action |
 |---|---|---|
-| `Processed` | The message is valid and the Publisher API accepted `UpdateMessageAsProcessed` | `ack` |
+| `Processed` | The message is valid and the Publisher API accepted `UpdateMessageAsProcessed`, or answered `409 Conflict` because it was already processed (a redelivery) | `ack` |
 | `Rejected` | The body is empty or not valid JSON, or the message breaks a domain rule (`Id` must be greater than zero, `Payload` must not be empty) | `nack` without requeue |
 | `Failed` | The message is valid but `UpdateMessageAsProcessed` failed after all retries; the error is sent to `AddErrorText` | `nack` without requeue |
 | — | The service is shutting down while a message is in flight | No ack: the broker redelivers it |
@@ -88,16 +96,16 @@ sequenceDiagram
             Consumer->>Broker: basic.nack (requeue = false)
         else Valid message
             UseCase->>Client: UpdateMessageAsProcessedAsync(id)
-            Client->>Api: POST UpdateMessageAsProcessed { id }
-            alt Success
-                Api-->>Client: 2xx
+            Client->>Api: PATCH /api/Message/{id}/UpdateAsProcessed
+            alt Success or already processed
+                Api-->>Client: 2xx or 409 Conflict
                 UseCase-->>Consumer: Processed
                 Consumer->>Broker: basic.ack
             else Failure after retries, timeouts or open circuit
                 Api-->>Client: Error
                 Client-->>UseCase: HttpRequestException
                 UseCase->>Client: AddErrorTextAsync(id, error) best effort
-                Client->>Api: POST AddErrorText { id, text }
+                Client->>Api: POST /api/Error/Add { messageId, text }
                 UseCase-->>Consumer: Failed
                 Consumer->>Broker: basic.nack (requeue = false)
             end
@@ -244,7 +252,7 @@ The dependency rule is enforced by `RabbitMQConsumer.Test/Architecture/Dependenc
   - exponential backoff while the broker is unreachable at startup;
   - automatic recovery after network failures;
   - the channel is recreated when the broker closes it with a channel-level error or cancels the consumer (for example, when the queue is deleted), and consumption resumes once the queue exists again.
-- **At-least-once delivery**: manual acknowledgements, bounded prefetch (`PrefetchCount`) and ack only after the Publisher API confirms. Downstream endpoints should be idempotent by `Id`.
+- **At-least-once delivery**: manual acknowledgements, bounded prefetch (`PrefetchCount`) and ack only after the Publisher API confirms. A redelivered message that is already processed is acknowledged, because the Publisher API answers `409 Conflict` and the consumer treats it as success.
 - **Fail fast configuration**: options are validated when the host starts; a missing value or an invalid URL stops the service with a clear error.
 - **File-based health check**: a worker has no HTTP endpoint, so the health report is published to a file that the container healthcheck inspects. No port is opened and no extra tooling is needed in the image.
 - **Structured logging**: message templates with named properties (`{MessageId}`, `{DeliveryTag}`, …) instead of string concatenation.
@@ -270,8 +278,8 @@ Settings live in `RabbitMQConsumer.App/appsettings.json`:
   },
   "UrlOptions": {
     "PublisherApi": {
-      "UpdateMessageAsProcessed": "http://localhost:5000/messages/update-message-as-processed",
-      "AddErrorText": "http://localhost:5000/messages/add-error-text"
+      "UpdateMessageAsProcessed": "http://localhost:5000/api/Message/{id}/UpdateAsProcessed",
+      "AddErrorText": "http://localhost:5000/api/Error/Add"
     }
   }
 }
@@ -287,8 +295,8 @@ Settings live in `RabbitMQConsumer.App/appsettings.json`:
 | `RabbitMQOptions:HeartbeatSeconds` | Heartbeat interval used to detect dead connections |
 | `RabbitMQOptions:NetworkRecoveryIntervalSeconds` | Wait between automatic recovery attempts |
 | `RabbitMQOptions:MaxConnectRetryDelaySeconds` | Upper bound of the backoff while the broker is unreachable |
-| `UrlOptions:PublisherApi:UpdateMessageAsProcessed` | Absolute URL called with `{ "id": … }` when a message is processed |
-| `UrlOptions:PublisherApi:AddErrorText` | Absolute URL called with `{ "id": …, "text": … }` when processing fails |
+| `UrlOptions:PublisherApi:UpdateMessageAsProcessed` | URL template called with `PATCH` and no body when a message is processed. It must contain `{id}`, which is replaced by the message id |
+| `UrlOptions:PublisherApi:AddErrorText` | Absolute URL called with `POST` and `{ "messageId": …, "text": … }` when processing fails |
 | `HealthCheckFileOptions:FilePath` | Optional. Health status file, `/tmp/healthy` by default |
 
 All values are required, and the URLs must be absolute `http`/`https` URLs. The committed `appsettings.json` contains placeholders, so the service will not start until real values are provided. Prefer environment variables (or user secrets) for environment-specific values and credentials:
@@ -296,7 +304,7 @@ All values are required, and the URLs must be absolute `http`/`https` URLs. The 
 ```bash
 export RabbitMQOptions__Host=localhost
 export RabbitMQOptions__Pwd=guest
-export UrlOptions__PublisherApi__UpdateMessageAsProcessed=http://localhost:5000/messages/update-message-as-processed
+export UrlOptions__PublisherApi__UpdateMessageAsProcessed='http://localhost:5000/api/Message/{id}/UpdateAsProcessed'
 ```
 
 ## Getting started

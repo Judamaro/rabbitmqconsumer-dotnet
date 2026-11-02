@@ -15,10 +15,33 @@ public sealed class JsonHttpClient(HttpClient _httpClient, ILogger<JsonHttpClien
 
         using JsonContent content = JsonContent.Create(body, body.GetType());
         await content.LoadIntoBufferAsync(cancellationToken);
-        HttpResponseMessage response = await _httpClient.PostAsync(url, content, cancellationToken);
+        using HttpRequestMessage request = new(HttpMethod.Post, url) { Content = content };
+
+        return await SendAsync(request, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task<HttpResponseMessage> SendPatchAsync(string url, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(url);
+
+        using HttpRequestMessage request = new(HttpMethod.Patch, url);
+
+        return await SendAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Sends the request and logs a warning when the response status code is not successful.
+    /// </summary>
+    /// <param name="request">Request to send.</param>
+    /// <param name="cancellationToken">Token to cancel the request.</param>
+    /// <returns>The response received, which may have a non-success status code.</returns>
+    private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        HttpResponseMessage response = await _httpClient.SendAsync(request, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            _logger.LogWarning("POST {Url} failed with status code {StatusCode}", url, (int)response.StatusCode);
+            _logger.LogWarning("{Method} {Url} failed with status code {StatusCode}", request.Method, request.RequestUri, (int)response.StatusCode);
 
         return response;
     }

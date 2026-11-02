@@ -14,4 +14,13 @@ public interface IJsonHttpClient
     /// <param name="cancellationToken">Token to cancel the request.</param>
     /// <returns>The response received, which may have a non-success status code.</returns>
     public Task<HttpResponseMessage> SendPostAsync(string url, object body, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sends a PATCH request without body to <paramref name="url"/>.
+    /// The caller owns the returned response and must dispose it.
+    /// </summary>
+    /// <param name="url">Absolute URL of the endpoint.</param>
+    /// <param name="cancellationToken">Token to cancel the request.</param>
+    /// <returns>The response received, which may have a non-success status code.</returns>
+    public Task<HttpResponseMessage> SendPatchAsync(string url, CancellationToken cancellationToken = default);
 }
